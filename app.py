@@ -5,6 +5,7 @@ import os
 app = Flask(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
+SENHA = os.environ.get("SENHA_DADOS", "")
 
 def get_conn():
     return psycopg2.connect(DATABASE_URL)
@@ -53,6 +54,10 @@ def receber():
 
 @app.route("/dados", methods=["GET"])
 def ver_dados():
+    senha = request.args.get("senha", "")
+    if senha != SENHA:
+        return jsonify({"erro": "Acesso negado. Senha incorreta."}), 401
+
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("SELECT * FROM execucoes ORDER BY id DESC")
