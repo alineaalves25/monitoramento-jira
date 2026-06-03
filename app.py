@@ -4,72 +4,58 @@ import os
 
 app = Flask(__name__)
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
-SENHA = os.environ.get("SENHA_DADOS", "")
+def get_db_connection():
+    conn = psycopg2.connect(os.environ.get('DATABASE_URL'))
+    return conn
 
-def get_conn():
-    return psycopg2.connect(DATABASE_URL)
-
-def criar_tabela():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS execucoes (
-            id SERIAL PRIMARY KEY,
-            nome_automacao TEXT,
-            escopo TEXT,
-            data TEXT,
-            itens_impactados TEXT,
-            resultado TEXT,
-            detalhes_resultado TEXT
-        )
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
-
-criar_tabela()
-
-@app.route("/webhook", methods=["POST"])
-def receber():
+@app.route('/webhook', methods=['POST'])
+def webhook():
     dados = request.json
-    conn = get_conn()
+    nome = dados.get('Nome_Automacao', '')
+    escopo = dados.get('Escopo', '')
+    data = dados.get('Data', '')
+    itens = dados.get('Itens_Impactados', '')
+    resultado = dados.get('Resultado', '')
+    detalhes = dados.get('Detalhes_Resultado', '')
+
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO execucoes 
-        (nome_automacao, escopo, data, itens_impactados, resultado, detalhes_resultado)
+        INSERT INTO execucoes (nome_automacao, escopo, data, itens_impactados, resultado, detalhes_resultado)
         VALUES (%s, %s, %s, %s, %s, %s)
-    """, (
-        dados.get("Nome_Automacao", ""),
-        dados.get("Escopo", ""),
-        dados.get("Data", ""),
-        dados.get("Itens_Impactados", ""),
-        dados.get("Resultado", ""),
-        dados.get("Detalhes_Resultado", "")
-    ))
+    """, (nome, escopo, data, itens, resultado, detalhes))
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({"status": "ok"})
 
-@app.route("/dados", methods=["GET"])
-def ver_dados():
-    senha = request.args.get("senha", "")
-    if senha != SENHA:
-        return jsonify({"erro": "Acesso negado. Senha incorreta."}), 401
+    return jsonify({"status": "ok"}), 200
 
-    conn = get_conn()
+@app.route('/dados', methods=['GET'])
+def dados():
+    senha = request.args.get('senha')
+    if senha != os.environ.get('SENHA_DADOS'):
+        return jsonify({"erro": "Senha incorreta"}), 401
+
+    conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT * FROM execucoes ORDER BY id DESC")
-    colunas = [desc[0] for desc in cur.description]
-    registros = [dict(zip(colunas, row)) for row in cur.fetchall()]
+    registros = cur.fetchall()
     cur.close()
     conn.close()
-    return jsonify(registros)
 
-@app.route("/", methods=["GET"])
-def home():
-    return "Monitoramento Jira - Online com PostgreSQL!"
+    resultado = []
+    for r in registros:
+        resultado.append({
+            "id": r[0],
+            "nome_automacao": r[1],
+            "escopo": r[2],
+            "data": r[3],
+            "itens_impactados": r[4],
+            "resultado": r[5],
+            "detalhes_resultado": r[6]
+        })
+
+    return jsonify(resultado)
 
 @app.route('/limpar', methods=['GET'])
 def limpar():
@@ -84,3 +70,6 @@ def limpar():
     cur.close()
     conn.close()
     return jsonify({"mensagem": "Todos os registros foram apagados!"})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
