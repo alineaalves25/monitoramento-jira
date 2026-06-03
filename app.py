@@ -70,3 +70,16 @@ def ver_dados():
 @app.route("/", methods=["GET"])
 def home():
     return "Monitoramento Jira - Online com PostgreSQL!"
+    @app.route('/limpar', methods=['GET'])
+def limpar():
+    senha = request.args.get('senha')
+    if senha != os.environ.get('SENHA_DADOS'):
+        return jsonify({"erro": "Senha incorreta"}), 401
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM execucoes")
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({"mensagem": "Todos os registros foram apagados!"})
